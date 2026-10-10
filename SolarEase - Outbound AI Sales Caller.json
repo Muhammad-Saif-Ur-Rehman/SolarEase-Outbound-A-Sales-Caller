@@ -1,0 +1,852 @@
+{
+  "name": "SolarEase - Outbound AI Sales Caller",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8284ad6a-8a60-4749-91bb-3683d93d71db",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        128,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cs1",
+              "name": "vapi_phone_number_id",
+              "value": "<__PLACEHOLDER_VALUE__Vapi phone number ID (Vapi dashboard > Phone Numbers)__>",
+              "type": "string"
+            },
+            {
+              "id": "cs2",
+              "name": "results_webhook_url",
+              "value": "https://saif41383.app.n8n.cloud/webhook/solarease-vapi-eoc",
+              "type": "string"
+            },
+            {
+              "id": "cs3",
+              "name": "agent_name",
+              "value": "Alex",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eda26b37-ca7e-4153-82f5-11bb6ff784af",
+      "name": "Call Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        400,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "1c84c870-462a-4da0-9cdb-85b41fa7dba1",
+      "name": "Get Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        368,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dial only leads with a phone number that have not been called yet\n// (blank, 'pending' or 'new' status = ready to call)\nconst READY = ['', 'pending', 'new'];\nreturn $input.all().filter(i => String(i.json.phone || '').trim() && READY.includes(String(i.json.call_status || '').trim().toLowerCase()));"
+      },
+      "id": "1402c17b-3dec-4f31-8659-56bb5215a2c9",
+      "name": "Filter Uncalled",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Builds the full Vapi call request: the AI sales caller script, FAQ facts,\n// objection handling and the structured qualification schema all live here.\nconst NL = String.fromCharCode(10);\nconst settings = $('Call Settings').first().json;\nconst lead = $json;\nconst firstName = String(lead.first_name || '').trim() || 'there';\nlet phone = String(lead.phone || '').replace(/[^0-9+]/g, '');\nif (!phone.startsWith('+')) phone = '+' + phone;\nconst leadSource = String(lead.lead_source || '').trim() || 'a list of San Diego homeowners who asked to hear about ways to save on energy';\nconst agent = settings.agent_name || 'Alex';\n\nconst systemPrompt = [\n  'You are ' + agent + ', a friendly, professional outbound sales caller for SolarEase Solutions, a residential solar installation company. You are on a phone call with ' + firstName + '.',\n  '',\n  'STYLE: Warm, confident and concise. Ask one question at a time. Keep each turn to one or two short sentences. Briefly acknowledge every answer (for example: Got it, that helps) before moving on. Never invent facts. Use the first name naturally, not in every sentence.',\n  '',\n  'COMPANY FACTS (the only facts you may state):',\n  '- Company: SolarEase Solutions',\n  '- Address: 123 GreenTech Avenue, San Diego, CA 92101',\n  '- Operating hours: Monday to Friday, 9:00 AM to 6:00 PM Pacific Time',\n  '- Estimated price range: 10,000 to 25,000 US dollars, depending on system size and the site. An exact quote needs a site assessment.',\n  '- What we offer: lower utility bills, flexible financing (cash, loan or lease) and expert installation.',\n  'If asked something not covered here (warranties, exact savings, tax credits), say a solar consultant will cover it in detail during the follow-up.',\n  '',\n  'CALL FLOW:',\n  '1. Opening: your greeting has already been spoken. After they reply, introduce yourself and give a short pitch: SolarEase helps homeowners lower their electricity bills with solar, offers flexible financing, and handles expert installation from start to finish. Ask if they have a couple of minutes for a few quick questions to see if their home is a good fit.',\n  '2. Qualification. Ask these one at a time, in this order, and clarify vague answers:',\n  '   a. What type of roof do you have, for example asphalt shingle, tile, metal or flat?',\n  '   b. Roughly what has your average monthly electricity bill been over the last three months?',\n  '   c. About how large is your home in square feet?',\n  '   d. Is someone usually at home during the day, roughly 10 AM to 4 PM?',\n  '   e. How many heavy appliances do you run, such as air conditioners, refrigerators or electric heaters?',\n  '   f. How many ceiling fans are in regular use?',\n  '   g. Who is your current utility provider, and do you happen to know your peak rate?',\n  '   h. Are there any trees or nearby buildings that shade your roof?',\n  '   i. Would you prefer to pay cash, take a loan, or lease, and what budget do you have in mind?',\n  '   If they do not know an answer, say that is fine and move on.',\n  '3. Close: if they are interested, explain the next steps: a solar consultant reviews their answers, prepares an estimate and arranges a site assessment. Ask for a preferred day and time for that follow-up and repeat it back to confirm. Tell them a follow-up email is on its way.',\n  '4. Finish politely, thank them by first name, then use the end call tool.',\n  '',\n  'OBJECTION HANDLING:',\n  '- Where did you get my number? Apologize for the surprise and answer honestly: your number came from ' + leadSource + '. Offer to remove them from the list. If they want removal, confirm it, thank them and end the call.',\n  '- I am busy right now: Say you completely understand and ask when would be a better time for a quick five minute call. Confirm the day and time, thank them and end the call.',\n  '- Not interested: Respect it. Offer one short value point, for example that many homeowners lower their monthly bill with little or no upfront cost through a lease or loan, and ask if a quick look would be worthwhile. If they still decline, thank them warmly and end the call. Never push more than once.',\n  '- If asked whether you are an AI, say yes, you are the SolarEase AI assistant.',\n  '',\n  'FAQ: Answer questions about the address, operating hours and pricing directly from COMPANY FACTS, then return to where you left off.'\n].join(NL);\n\nconst str = (d) => ({ type: 'string', description: d });\n\nconst schema = {\n  type: 'object',\n  properties: {\n    outcome: { type: 'string', enum: ['Interested', 'Not Interested', 'Callback Requested', 'No Response/Hang-up'], description: 'Final call outcome. Interested: wants next steps or an estimate. Not Interested: declined or asked to be removed. Callback Requested: asked to be called back at another time. No Response/Hang-up: voicemail, silence, or hung up before a real conversation.' },\n    callback_time: str('Preferred day and time for the callback or follow-up exactly as agreed. Empty if none was given.'),\n    roof_type: str('Roof type or material, e.g. asphalt shingle, tile, metal, flat.'),\n    avg_monthly_bill: str('Average monthly electricity bill over the last 3 months, e.g. $220.'),\n    home_size_sqft: str('Approximate home size in square feet, e.g. 2000.'),\n    daytime_occupancy: str('Whether someone is typically home during peak sun hours, with any detail.'),\n    heavy_appliances_count: str('Number of heavy appliances (ACs, refrigerators, electric heaters, etc.), with breakdown if given.'),\n    ceiling_fans_count: str('Number of ceiling fans in regular use.'),\n    utility_provider: str('Current electricity utility provider, e.g. SDG&E.'),\n    peak_tariff: str('Peak tariff or rate if known, e.g. $0.45/kWh. Empty if unknown.'),\n    shading_concerns: str('Shading from trees or adjacent buildings, or None.'),\n    preferred_financing: str('Preferred financing: Cash, Loan or Lease.'),\n    budget_expectation: str('Budget expectation stated by the lead.')\n  },\n  required: ['outcome']\n};\n\nconst payload = {\n  phoneNumberId: settings.vapi_phone_number_id,\n  customer: { number: phone, name: firstName, email: String(lead.email || ''), externalId: String(lead.row_number) },\n  assistant: {\n    name: 'SolarEase Sales Caller',\n    firstMessage: 'Hi ' + firstName + ', how are you today?',\n    firstMessageMode: 'assistant-speaks-first',\n    model: {\n      provider: 'openai',\n      model: 'gpt-5.4-mini',\n      temperature: 0.4,\n      messages: [{ role: 'system', content: systemPrompt }],\n      tools: [{ type: 'endCall' }]\n    },\n    voice: { provider: 'vapi', voiceId: 'Elliot' },\n    transcriber: { provider: 'deepgram', model: 'nova-3', language: 'en' },\n    voicemailDetection: { provider: 'vapi' },\n    endCallMessage: 'Thanks so much for your time, ' + firstName + '. Have a great day!',\n    maxDurationSeconds: 600,\n    metadata: { row_number: lead.row_number, email: lead.email || '', first_name: firstName },\n    analysisPlan: {\n      structuredDataPlan: { enabled: true, schema: schema, timeoutSeconds: 30 }\n    },\n    serverMessages: ['end-of-call-report'],\n    server: { url: settings.results_webhook_url, headers: { 'x-vapi-secret': 'se-' + $workflow.id } }\n  }\n};\n\nreturn { json: { ...lead, call_payload: payload } };\n"
+      },
+      "id": "ac9eb94c-c722-42f2-85d3-d968aa06e78c",
+      "name": "Build Call Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.call_payload) }}",
+        "options": {}
+      },
+      "id": "253904e7-551f-4d1e-ab4e-15fe515ffeb6",
+      "name": "Vapi Outbound Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1088,
+        -48
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Loop Over Leads').item.json.row_number }}",
+            "call_status": "calling",
+            "last_called_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "933d3897-a906-4cb2-b96e-f246e4cc473e",
+      "name": "Mark Calling",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1328,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "id": "8bdaa963-2a7b-4f6e-b1eb-a1ac21ad1791",
+      "name": "Wait Between Calls",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        -48
+      ],
+      "webhookId": "9db10831-55dd-4300-a132-10933fc8bb29"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "81e4ba29-1eff-4f60-b121-98bcf273fe73",
+      "name": "Loop Over Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        848,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select SolarEase leads spreadsheet"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Loop Over Leads').item.json.row_number }}",
+            "call_status": "call_failed",
+            "ended_reason": "={{ $json.error && $json.error.message ? $json.error.message : 'Vapi call could not be created' }}",
+            "last_called_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "63ba6e70-3434-408c-a3c7-862eea2c457f",
+      "name": "Mark Call Failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1376,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "solarease-vapi-eoc",
+        "options": {}
+      },
+      "id": "7145c9ad-4fa5-4497-9546-0421f6e1fb21",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        128,
+        368
+      ],
+      "webhookId": "e2000000-0000-0000-0000-000000000002"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body.message.type }}",
+              "rightValue": "end-of-call-report",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.headers['x-vapi-secret'] }}",
+              "rightValue": "={{ 'se-' + $workflow.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "73de1976-da0d-4112-92bf-179e564b41ca",
+      "name": "Is End Of Call?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        368,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json.body.message || {};\nconst call = m.call || {};\nconst customer = call.customer || m.customer || {};\nconst assistantMeta = (m.assistant && m.assistant.metadata) || (call.assistant && call.assistant.metadata) || {};\nconst meta = { ...(call.metadata || {}), ...assistantMeta };\nconst analysis = m.analysis || call.analysis || {};\nlet sd = analysis.structuredData || {};\nif (typeof sd === 'string') { try { sd = JSON.parse(sd); } catch (e) { sd = {}; } }\nconst reason = String(m.endedReason || call.endedReason || '');\nconst duration = Math.round(m.durationSeconds || 0);\n\nconst VALID = ['Interested', 'Not Interested', 'Callback Requested', 'No Response/Hang-up'];\nconst NO_ANSWER = ['customer-did-not-answer', 'customer-busy', 'voicemail', 'twilio-failed-to-connect-call', 'customer-did-not-give-microphone-permission'];\n\nlet outcome = sd.outcome;\n// Safety net: unanswered, voicemail, instant hang-up, or invalid model output -> No Response/Hang-up\nif (NO_ANSWER.includes(reason) || duration < 10 || !VALID.includes(outcome)) {\n  outcome = 'No Response/Hang-up';\n}\n\nconst s = (v) => (v === null || v === undefined) ? '' : String(v);\n\nreturn [{\n  json: {\n    row_number: Number(meta.row_number || customer.externalId),\n    email: s(meta.email || customer.email).trim(),\n    first_name: s(meta.first_name || customer.name) || 'there',\n    call_status: 'completed',\n    outcome,\n    callback_time: outcome === 'Callback Requested' || outcome === 'Interested' ? s(sd.callback_time) : '',\n    roof_type: s(sd.roof_type),\n    avg_monthly_bill: s(sd.avg_monthly_bill),\n    home_size_sqft: s(sd.home_size_sqft),\n    daytime_occupancy: s(sd.daytime_occupancy),\n    heavy_appliances_count: s(sd.heavy_appliances_count),\n    ceiling_fans_count: s(sd.ceiling_fans_count),\n    utility_provider: s(sd.utility_provider),\n    peak_tariff: s(sd.peak_tariff),\n    shading_concerns: s(sd.shading_concerns),\n    preferred_financing: s(sd.preferred_financing),\n    budget_expectation: s(sd.budget_expectation),\n    call_summary: s(analysis.summary),\n    call_duration: duration,\n    ended_reason: reason,\n    last_called_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "d75eb882-7e26-42dc-b17a-55d92d0b44d6",
+      "name": "Normalize Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "call_status": "={{ $json.call_status }}",
+            "outcome": "={{ $json.outcome }}",
+            "callback_time": "={{ $json.callback_time }}",
+            "roof_type": "={{ $json.roof_type }}",
+            "avg_monthly_bill": "={{ $json.avg_monthly_bill }}",
+            "home_size_sqft": "={{ $json.home_size_sqft }}",
+            "daytime_occupancy": "={{ $json.daytime_occupancy }}",
+            "heavy_appliances_count": "={{ $json.heavy_appliances_count }}",
+            "ceiling_fans_count": "={{ $json.ceiling_fans_count }}",
+            "utility_provider": "={{ $json.utility_provider }}",
+            "peak_tariff": "={{ $json.peak_tariff }}",
+            "shading_concerns": "={{ $json.shading_concerns }}",
+            "preferred_financing": "={{ $json.preferred_financing }}",
+            "budget_expectation": "={{ $json.budget_expectation }}",
+            "call_summary": "={{ $json.call_summary }}",
+            "call_duration": "={{ $json.call_duration }}",
+            "ended_reason": "={{ $json.ended_reason }}",
+            "last_called_at": "={{ $json.last_called_at }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "cff3939c-5bae-46a8-9711-88430ec9d521",
+      "name": "Log To Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        848,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e1",
+              "leftValue": "={{ $('Normalize Results').first().json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "62e6a706-f733-43f8-a746-9cdc2df729f5",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Results').first().json.outcome }}",
+                    "rightValue": "No Response/Hang-up",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "No Response / Hang-up"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Results').first().json.outcome }}",
+                    "rightValue": "Not Interested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Not Interested"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Normalize Results').first().json.outcome }}",
+                    "rightValue": "Interested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Interested"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "988c2dbf-d775-4cf1-a137-4ad0b2feb74e",
+      "name": "Route By Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Normalize Results').first().json.email }}",
+        "subject": "We Tried Reaching You - SolarEase Solutions",
+        "message": "=<p>Hi {{ $('Normalize Results').first().json.first_name }},</p><p>We tried reaching you by phone today to talk about how solar could help lower your electricity bills, but we were not able to connect.</p><p>If you would still like to hear about our solar options, simply <b>reply to this email</b> and we will reconnect at a time that suits you.</p><p>Kind regards,<br>SolarEase Solutions<br>123 GreenTech Avenue, San Diego, CA 92101<br>Monday to Friday, 9:00 AM to 6:00 PM (PST)</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c290e0b8-228d-4e03-98f8-e6276263e9cc",
+      "name": "Email - No Response",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1600,
+        176
+      ],
+      "webhookId": "424b2ca7-ccdf-4652-8ef9-f9d27cce5def"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Normalize Results').first().json.row_number }}",
+            "email_sent": "Yes",
+            "email_sent_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "39289445-88d4-40f4-b2e9-8f6959fde129",
+      "name": "Mark Email Sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1856,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Normalize Results').first().json.email }}",
+        "subject": "Thank You for Your Time - SolarEase Solutions",
+        "message": "=<p>Hi {{ $('Normalize Results').first().json.first_name }},</p><p>Thank you for taking the time to speak with us today. We completely understand that solar is not the right fit for everyone right now.</p><p>If your needs change in the future, you are always welcome to reach out to us and we will be happy to help.</p><p>Kind regards,<br>SolarEase Solutions<br>123 GreenTech Avenue, San Diego, CA 92101<br>Monday to Friday, 9:00 AM to 6:00 PM (PST)</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "40eac0c5-d015-40f6-8164-de2e7b1ba3f5",
+      "name": "Email - Not Interested",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1600,
+        336
+      ],
+      "webhookId": "5a868aab-d97b-4547-ad88-a900e25269c4"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Normalize Results').first().json.email }}",
+        "subject": "Thanks for Your Interest - Next Steps with SolarEase",
+        "message": "=<p>Hi {{ $('Normalize Results').first().json.first_name }},</p><p>Thank you for speaking with us about solar for your home. Here is what happens next:</p><ul><li>Our team will review the details you shared, including your roof, energy usage and financing preference.</li><li>We will prepare an indicative system size and price estimate. Systems typically range from $10,000 to $25,000 depending on system size and site.</li><li>A solar consultant will then walk you through the options and arrange a site assessment.</li></ul>{{ $('Normalize Results').first().json.callback_time ? '<p>You mentioned <b>' + $('Normalize Results').first().json.callback_time + '</b> as a good time to connect, and we will aim for that.</p>' : '<p>To help us schedule, just reply to this email with a day and time that works for you.</p>' }}<p>Kind regards,<br>SolarEase Solutions<br>123 GreenTech Avenue, San Diego, CA 92101<br>Monday to Friday, 9:00 AM to 6:00 PM (PST)</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4c059cb2-52f0-4930-b709-bc8d88a69912",
+      "name": "Email - Interested",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1600,
+        496
+      ],
+      "webhookId": "0f1ed6c3-ba07-46d4-a71f-7cedb6e0fcb2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Settings": {
+      "main": [
+        [
+          {
+            "node": "Get Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter Uncalled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Uncalled": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Call Request": {
+      "main": [
+        [
+          {
+            "node": "Vapi Outbound Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vapi Outbound Call": {
+      "main": [
+        [
+          {
+            "node": "Mark Calling",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Call Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Calling": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Between Calls": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Leads": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Build Call Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Call Failed": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is End Of Call?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is End Of Call?": {
+      "main": [
+        [
+          {
+            "node": "Normalize Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Results": {
+      "main": [
+        [
+          {
+            "node": "Log To Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log To Sheet": {
+      "main": [
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email?": {
+      "main": [
+        [
+          {
+            "node": "Route By Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route By Outcome": {
+      "main": [
+        [
+          {
+            "node": "Email - No Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Not Interested",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Interested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - No Response": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Not Interested": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Interested": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "453f0a8c-aae1-4972-93df-550f3abe7971",
+  "meta": {
+    "instanceId": "27807bf8c6f2c9e81af803b8c407151f1260aa09ac13fe1979987dba66a69061"
+  },
+  "nodeGroups": [
+    {
+      "id": "c661233e-7f93-4514-855e-314118ef4340",
+      "name": "Prepare lead list",
+      "nodeIds": [
+        "eda26b37-ca7e-4153-82f5-11bb6ff784af",
+        "1c84c870-462a-4da0-9cdb-85b41fa7dba1",
+        "1402c17b-3dec-4f31-8659-56bb5215a2c9"
+      ],
+      "description": "Loads call settings and pulls leads from the sheet that have a phone number and have not been called yet"
+    },
+    {
+      "id": "d68ca778-1b13-479e-9231-d8ee4f72143f",
+      "name": "Place AI sales calls",
+      "nodeIds": [
+        "81e4ba29-1eff-4f60-b121-98bcf273fe73",
+        "ac9eb94c-c722-42f2-85d3-d968aa06e78c",
+        "253904e7-551f-4d1e-ab4e-15fe515ffeb6",
+        "63ba6e70-3434-408c-a3c7-862eea2c457f",
+        "933d3897-a906-4cb2-b96e-f246e4cc473e",
+        "8bdaa963-2a7b-4f6e-b1eb-a1ac21ad1791"
+      ],
+      "description": "One lead at a time: builds the caller script, dials the lead, marks the row, then pauses before the next call"
+    },
+    {
+      "id": "86931da6-98ba-4702-a0e1-df24ca2fb615",
+      "name": "Capture call results",
+      "nodeIds": [
+        "73de1976-da0d-4112-92bf-179e564b41ca",
+        "d75eb882-7e26-42dc-b17a-55d92d0b44d6",
+        "cff3939c-5bae-46a8-9711-88430ec9d521"
+      ],
+      "description": "When a call ends, checks the secret, sets the final outcome and writes each answer to its own sheet column"
+    },
+    {
+      "id": "79a093b3-4eee-4c83-a1cc-9b5d29f28bc5",
+      "name": "Send outcome follow-up",
+      "nodeIds": [
+        "62e6a706-f733-43f8-a746-9cdc2df729f5",
+        "988c2dbf-d775-4cf1-a137-4ad0b2feb74e",
+        "c290e0b8-228d-4e03-98f8-e6276263e9cc",
+        "40eac0c5-d015-40f6-8164-de2e7b1ba3f5",
+        "4c059cb2-52f0-4930-b709-bc8d88a69912",
+        "39289445-88d4-40f4-b2e9-8f6959fde129"
+      ],
+      "description": "Emails the lead the template matching their outcome, then records that the email went out"
+    }
+  ],
+  "id": "0CJAASY7FDWjvfIE",
+  "tags": []
+}
